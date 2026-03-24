@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vol Surface</title>
+  <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0a0a0a;
+      --card:      #141414;
+      --card2:     #1c1c1c;
+      --border:    #252525;
+      --green:     #00c805;
+      --green-dim: #00a004;
+      --red:       #ff4b4b;
+      --text:      #f0f0f0;
+      --muted:     #666;
+      --sub:       #999;
+      --accent:    #3b82f6;
+      --radius:    12px;
+    }
+
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; overflow-x: hidden; }
+
+    /* ── Header ── */
+    header {
+      display: flex; align-items: center; gap: 20px;
+      padding: 16px 28px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+      position: sticky; top: 0; z-index: 100;
+    }
+    .logo { font-size: 16px; font-weight: 700; letter-spacing: -0.5px; color: var(--green); white-space: nowrap; }
+    .logo span { color: var(--text); }
+
+    .search-wrap {
+      display: flex; align-items: center; gap: 10px;
+      background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+      padding: 8px 14px; flex: 0 0 320px;
+      transition: border-color 0.2s;
+    }
+    .search-wrap:focus-within { border-color: var(--green); }
+    .search-wrap svg { flex-shrink: 0; color: var(--muted); }
+    #ticker-input {
+      background: none; border: none; outline: none; color: var(--text);
+      font-size: 15px; font-weight: 500; font-family: inherit; width: 100%;
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    #ticker-input::placeholder { color: var(--muted); text-transform: none; letter-spacing: 0; font-weight: 400; }
+
+    #load-btn {
+      background: var(--green); color: #000; border: none; border-radius: 8px;
+      padding: 9px 22px; font-size: 14px; font-weight: 600; cursor: pointer;
+      font-family: inherit; transition: background 0.15s, transform 0.1s;
+      white-space: nowrap;
+    }
+    #load-btn:hover { background: #00e606; }
+    #load-btn:active { transform: scale(0.97); }
+    #load-btn:disabled { background: var(--card2); color: var(--muted); cursor: not-allowed; transform: none; }
+
+    .controls-group { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+
+    .toggle-group { display: flex; background: var(--card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .toggle-btn {
+      background: none; border: none; color: var(--sub); padding: 7px 14px;
+      font-size: 12px; font-weight: 500; cursor: pointer; font-family: inherit;
+      transition: background 0.15s, color 0.15s;
+    }
+    .toggle-btn.active { background: var(--card2); color: var(--text); }
+    .toggle-btn:hover:not(.active) { color: var(--text); }
+
+    .ctrl-label { font-size: 11px; color: var(--muted); font-weight: 500; letter-spacing: 0.5px; }
+
+    /* ── Stats bar ── */
+    #stats-bar {
+      display: flex; gap: 0; padding: 0 28px;
+      border-bottom: 1px solid var(--border);
+      background: var(--card);
+      overflow-x: auto;
+    }
+    #stats-bar:empty, #stats-bar.hidden { display: none; }
+
+    .stat-pill {
+      padding: 12px 24px; border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; gap: 3px; white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .stat-pill:last-child { border-right: none; }
+    .stat-label { font-size: 10px; color: var(--muted); font-weight: 500; letter-spacing: 0.8px; text-transform: uppercase; }
+    .stat-value { font-size: 18px; font-weight: 600; letter-spacing: -0.5px; }
+    .stat-sub { font-size: 11px; color: var(--sub); }
+    .up { color: var(--green); }
+    .dn { color: var(--red); }
+
+    /* ── Main layout ── */
+    main { padding: 0; }
+
+    /* ── Surface section ── */
+    #surface-section { padding: 20px 28px 0; }
+
+    .section-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .section-title { font-size: 13px; font-weight: 600; color: var(--sub); letter-spacing: 0.5px; text-transform: uppercase; }
+
+    .view-controls { display: flex; align-items: center; gap: 16px; }
+
+    #surface-plot { width: 100%; height: 520px; border-radius: var(--radius); overflow: hidden; }
+
+    /* ── Bottom row ── */
+    #bottom-row {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+      padding: 16px 28px 28px;
+    }
+
+    .chart-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 18px 18px 10px;
+    }
+    .chart-card-header {
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;
+    }
+    .chart-card-title { font-size: 12px; font-weight: 600; color: var(--sub); letter-spacing: 0.5px; text-transform: uppercase; }
+
+    #smile-select {
+      background: var(--card2); border: 1px solid var(--border); color: var(--text);
+      padding: 5px 10px; border-radius: 6px; font-size: 12px; font-family: inherit; cursor: pointer; outline: none;
+    }
+    #smile-plot { width: 100%; height: 240px; }
+    #term-plot  { width: 100%; height: 240px; }
+
+    /* ── Empty / loading state ── */
+    #empty-state {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      height: 60vh; gap: 16px; color: var(--muted);
+    }
+    #empty-state svg { opacity: 0.3; }
+    #empty-state .empty-title { font-size: 20px; font-weight: 600; color: var(--sub); }
+    #empty-state .empty-sub { font-size: 14px; }
+
+    /* ── Loader ── */
+    #loader {
+      display: none; flex-direction: column; align-items: center; justify-content: center;
+      height: 60vh; gap: 20px;
+    }
+    #loader.visible { display: flex; }
+    .spinner {
+      width: 40px; height: 40px; border: 3px solid var(--border);
+      border-top-color: var(--green); border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loader-text { font-size: 14px; color: var(--sub); }
+
+    /* ── Error banner ── */
+    #error-banner {
+      display: none; margin: 20px 28px; padding: 14px 18px;
+      background: rgba(255,75,75,0.1); border: 1px solid rgba(255,75,75,0.3);
+      border-radius: 10px; color: var(--red); font-size: 14px;
+    }
+    #error-banner.visible { display: block; }
+
+    /* ── Info tag ── */
+    .tag {
+      display: inline-block; padding: 2px 8px; border-radius: 4px;
+      font-size: 11px; font-weight: 600; letter-spacing: 0.3px;
+    }
+    .tag-green { background: rgba(0,200,5,0.15); color: var(--green); }
+    .tag-blue  { background: rgba(59,130,246,0.15); color: var(--accent); }
+    .tag-muted { background: var(--card2); color: var(--sub); }
+
+    /* ── Refresh ── */
+    .refresh-btn {
+      background: none; border: 1px solid var(--border); color: var(--sub);
+      border-radius: 6px; padding: 5px 10px; font-size: 11px; font-family: inherit;
+      cursor: pointer; transition: border-color 0.15s, color 0.15s;
+      display: flex; align-items: center; gap: 5px;
+    }
+    .refresh-btn:hover { border-color: var(--green); color: var(--green); }
+
+    /* scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<!-- ── HEADER ─────────────────────────────────────────────────────── -->
+<header>
+  <div class="logo">VOL<span>SURFACE</span></div>
+
+  <div class="search-wrap">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+    </svg>
+    <input id="ticker-input" type="text" placeholder="Enter ticker — AAPL, SPY, TSLA…" maxlength="10" autocomplete="off" />
+  </div>
+
+  <button id="load-btn">Load Surface</button>
+
+  <div class="controls-group" id="view-controls" style="display:none">
+    <span class="ctrl-label">X-AXIS</span>
+    <div class="toggle-group">
+      <button class="toggle-btn active" data-axis="strike">Strike ($)</button>
+      <button class="toggle-btn" data-axis="moneyness">Moneyness</button>
+    </div>
+
+    <span class="ctrl-label">DISPLAY</span>
+    <div class="toggle-group">
+      <button class="toggle-btn active" data-display="otm">OTM</button>
+      <button class="toggle-btn" data-display="calls">Calls</button>
+      <button class="toggle-btn" data-display="puts">Puts</button>
+    </div>
+
+    <button class="refresh-btn" id="refresh-btn">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+        <path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+        <path d="M8 16H3v5"/>
+      </svg>
+      Refresh
+    </button>
+  </div>
+</header>
+
+<!-- ── STATS BAR ──────────────────────────────────────────────────── -->
+<div id="stats-bar" class="hidden"></div>
+
+<!-- ── ERROR BANNER ───────────────────────────────────────────────── -->
+<div id="error-banner"></div>
+
+<!-- ── MAIN ───────────────────────────────────────────────────────── -->
+<main>
+  <!-- Empty state -->
+  <div id="empty-state">
+    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+      <path d="M3 3v18h18"/><path d="m7 16 4-4 4 4 5-5"/>
+    </svg>
+    <div class="empty-title">Implied Volatility Surface</div>
+    <div class="empty-sub">Enter a ticker above to visualize the live vol surface</div>
+  </div>
+
+  <!-- Loader -->
+  <div id="loader">
+    <div class="spinner"></div>
+    <div class="loader-text" id="loader-text">Fetching options chain…</div>
+  </div>
+
+  <!-- Content (hidden until data loads) -->
+  <div id="content" style="display:none">
+
+    <!-- 3D Surface -->
+    <div id="surface-section">
+      <div class="section-header">
+        <span class="section-title">3D Implied Volatility Surface</span>
+        <span id="surface-tag" class="tag tag-green"></span>
+      </div>
+      <div id="surface-plot"></div>
+    </div>
+
+    <!-- Smile + Term Structure -->
+    <div id="bottom-row">
+      <div class="chart-card">
+        <div class="chart-card-header">
+          <span class="chart-card-title">Volatility Smile</span>
+          <select id="smile-select"></select>
+        </div>
+        <div id="smile-plot"></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-card-header">
+          <span class="chart-card-title">ATM Vol Term Structure</span>
+          <span class="tag tag-muted" id="term-tag">ATM IV by Expiry</span>
+        </div>
+        <div id="term-plot"></div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<!-- ── SCRIPT ─────────────────────────────────────────────────────── -->
+<script>
+'use strict';
+
+// ── State ──────────────────────────────────────────────────────────────────
+let state = {
+  ticker: null,
+  data: null,
+  axisMode: 'strike',      // 'strike' | 'moneyness'
+  displayMode: 'otm',      // 'otm' | 'calls' | 'puts'
+  smileExpiry: null,
+};
+
+// ── DOM refs ───────────────────────────────────────────────────────────────
+const tickerInput  = document.getElementById('ticker-input');
+const loadBtn      = document.getElementById('load-btn');
+const refreshBtn   = document.getElementById('refresh-btn');
+const emptyState   = document.getElementById('empty-state');
+const loaderEl     = document.getElementById('loader');
+const loaderText   = document.getElementById('loader-text');
+const contentEl    = document.getElementById('content');
+const errorBanner  = document.getElementById('error-banner');
+const statsBar     = document.getElementById('stats-bar');
+const viewControls = document.getElementById('view-controls');
+const smileSelect  = document.getElementById('smile-select');
+const surfaceTag   = document.getElementById('surface-tag');
+const termTag      = document.getElementById('term-tag');
+
+// ── Plotly layout base ─────────────────────────────────────────────────────
+const DARK_BG  = '#0a0a0a';
+const CARD_BG  = '#141414';
+const BORDER   = '#252525';
+const TEXT_CLR = '#e0e0e0';
+const SUB_CLR  = '#666';
+
+const axis2dBase = {
+  gridcolor: BORDER, zerolinecolor: '#333',
+  tickfont: { color: SUB_CLR, size: 11 },
+  titlefont: { color: '#888', size: 12 },
+};
+
+const layout2dBase = {
+  paper_bgcolor: 'transparent',
+  plot_bgcolor: CARD_BG,
+  font: { family: 'Inter, sans-serif', color: TEXT_CLR },
+  margin: { l: 52, r: 16, t: 10, b: 44 },
+  legend: {
+    bgcolor: 'transparent', bordercolor: BORDER, borderwidth: 1,
+    font: { size: 11, color: SUB_CLR },
+    x: 0.02, y: 0.98,
+  },
+  hovermode: 'closest',
+};
+
+// ── Custom vol colorscale (blue → cyan → green → yellow → red) ─────────────
+const VOL_COLORSCALE = [
+  [0.00, '#1a56db'],
+  [0.20, '#06b6d4'],
+  [0.40, '#10b981'],
+  [0.60, '#f59e0b'],
+  [0.80, '#ef4444'],
+  [1.00, '#7c3aed'],
+];
+
+// ── Utilities ──────────────────────────────────────────────────────────────
+const fmt  = (v, d=2) => v == null ? '–' : Number(v).toFixed(d);
+const fmtP = (v, d=1) => v == null ? '–' : Number(v).toFixed(d) + '%';
+const fmtD = (v)      => v == null ? '–' : '$' + Number(v).toFixed(2);
+
+function showError(msg) {
+  errorBanner.textContent = '⚠  ' + msg;
+  errorBanner.classList.add('visible');
+}
+function hideError() { errorBanner.classList.remove('visible'); }
+
+function setLoading(msg = 'Fetching options chain…') {
+  emptyState.style.display = 'none';
+  contentEl.style.display = 'none';
+  loaderText.textContent = msg;
+  loaderEl.classList.add('visible');
+  loadBtn.disabled = true;
+  hideError();
+}
+
+function setContent() {
+  loaderEl.classList.remove('visible');
+  contentEl.style.display = 'block';
+  loadBtn.disabled = false;
+}
+
+function setEmpty() {
+  loaderEl.classList.remove('visible');
+  emptyState.style.display = 'flex';
+  loadBtn.disabled = false;
+}
+
+// ── Stats bar ──────────────────────────────────────────────────────────────
+function renderStats(d) {
+  const spot = d.spot;
+  const ts = d.term_structure || [];
+  const atm30 = ts.length ? ts.reduce((p, c) => Math.abs(c.dte - 30) < Math.abs(p.dte - 30) ? c : p) : null;
+  const ivFirst = ts.length ? ts[0].atm_iv : null;
+  const ivLast  = ts.length > 1 ? ts[ts.length - 1].atm_iv : null;
+  const slope = ivFirst && ivLast ? (ivLast - ivFirst).toFixed(1) : null;
+
+  // Skew: 25-delta approximation using OTM data
+  let skew = null;
+  if (d.smiles) {
+    const firstExp = Object.keys(d.smiles)[0];
+    if (firstExp) {
+      const sm = d.smiles[firstExp];
+      const otmCall = sm.filter(r => r.type === 'call' && r.moneyness >= 1.02 && r.moneyness <= 1.10);
+      const otmPut  = sm.filter(r => r.type === 'put'  && r.moneyness >= 0.90 && r.moneyness <= 0.98);
+      if (otmCall.length && otmPut.length) {
+        const cIV = otmCall.reduce((a,b)=>a+b.iv,0)/otmCall.length;
+        const pIV = otmPut.reduce((a,b)=>a+b.iv,0)/otmPut.length;
+        skew = (pIV - cIV).toFixed(1);
+      }
+    }
+  }
+
+  const pills = [
+    { label: 'SPOT PRICE', value: fmtD(spot), sub: d.symbol, cls: '' },
+    atm30 ? { label: '~30D ATM IV', value: fmtP(atm30.atm_iv), sub: `${atm30.dte}d expiry`, cls: 'up' } : null,
+    slope ? { label: 'TERM SLOPE', value: (slope > 0 ? '+' : '') + slope + '%', sub: `${ts[0].dte}d → ${ts[ts.length-1].dte}d`, cls: slope > 0 ? 'up' : 'dn' } : null,
+    skew  ? { label: 'PUT SKEW', value: (skew > 0 ? '+' : '') + skew + '%', sub: 'OTM put − call IV', cls: skew > 0 ? 'dn' : 'up' } : null,
+    { label: 'RISK-FREE', value: fmtP(d.risk_free), sub: '13-wk T-bill', cls: '' },
+    ts.length ? { label: 'EXPIRATIONS', value: ts.length, sub: 'loaded', cls: '' } : null,
+  ].filter(Boolean);
+
+  statsBar.innerHTML = pills.map(p =>
+    `<div class="stat-pill">
+      <span class="stat-label">${p.label}</span>
+      <span class="stat-value ${p.cls}">${p.value}</span>
+      <span class="stat-sub">${p.sub}</span>
+    </div>`
+  ).join('');
+  statsBar.classList.remove('hidden');
+}
+
+// ── 3D Surface ─────────────────────────────────────────────────────────────
+function renderSurface() {
+  const d = state.data;
+  if (!d) return;
+
+  const grid = state.axisMode === 'strike' ? d.grid_strike : d.grid_moneyness;
+  if (!grid) { Plotly.purge('surface-plot'); return; }
+
+  const xLabel = state.axisMode === 'strike' ? 'Strike ($)' : 'Moneyness (K/S)';
+  const xFmt   = state.axisMode === 'strike' ? '$' : '';
+
+  const zFlat = [].concat(...grid.z);
+  const zMin  = Math.min(...zFlat.filter(v => isFinite(v)));
+  const zMax  = Math.max(...zFlat.filter(v => isFinite(v)));
+
+  const surfaceTrace = {
+    type: 'surface',
+    x: grid.x,
+    y: grid.y,
+    z: grid.z,
+    colorscale: VOL_COLORSCALE,
+    cmin: zMin,
+    cmax: zMax,
+    showscale: true,
+    colorbar: {
+      title: { text: 'IV (%)', side: 'right', font: { color: '#888', size: 11 } },
+      tickfont: { color: SUB_CLR, size: 10 },
+      thickness: 12,
+      len: 0.6,
+      x: 1.02,
+    },
+    contours: {
+      z: {
+        show: true, usecolormap: true, highlightcolor: '#fff', project: { z: false },
+        width: 1,
+      },
+    },
+    lighting: { ambient: 0.7, diffuse: 0.5, specular: 0.3, roughness: 0.5 },
+    hovertemplate:
+      `<b>${xLabel}:</b> ${xFmt}%{x}<br>` +
+      `<b>DTE:</b> %{y:.0f}d<br>` +
+      `<b>IV:</b> %{z:.1f}%<extra></extra>`,
+    opacity: 0.95,
+  };
+
+  // Scatter overlay (raw data points)
+  let pts = d.otm_data || [];
+  if (state.displayMode === 'calls') pts = (d.otm_data||[]).filter(r=>r.type==='call');
+  if (state.displayMode === 'puts')  pts = (d.otm_data||[]).filter(r=>r.type==='put');
+
+  const xPts = pts.map(r => state.axisMode === 'strike' ? r.strike : r.moneyness);
+  const scatterTrace = {
+    type: 'scatter3d',
+    x: xPts,
+    y: pts.map(r => r.dte),
+    z: pts.map(r => r.iv),
+    mode: 'markers',
+    marker: {
+      size: 3,
+      color: pts.map(r => r.iv),
+      colorscale: VOL_COLORSCALE,
+      cmin: zMin, cmax: zMax,
+      line: { color: 'rgba(255,255,255,0.15)', width: 0.5 },
+    },
+    hovertemplate:
+      `<b>${xLabel}:</b> ${xFmt}%{x}<br>` +
+      `<b>DTE:</b> %{y}d<br>` +
+      `<b>IV:</b> %{z:.2f}%<br>` +
+      `<b>Type:</b> ${pts.map(r=>r.type).join(',')}<extra></extra>`,
+    customdata: pts.map(r => r.type),
+  };
+
+  const layout = {
+    paper_bgcolor: CARD_BG,
+    plot_bgcolor: CARD_BG,
+    font: { family: 'Inter, sans-serif', color: TEXT_CLR, size: 11 },
+    margin: { l: 0, r: 0, t: 0, b: 0 },
+    scene: {
+      bgcolor: CARD_BG,
+      camera: {
+        eye: { x: 1.6, y: -1.6, z: 0.7 },
+        center: { x: 0, y: 0, z: -0.15 },
+        up: { x: 0, y: 0, z: 1 },
+      },
+      xaxis: {
+        title: { text: xLabel, font: { size: 11, color: '#888' } },
+        gridcolor: '#222', showbackground: true, backgroundcolor: '#111',
+        tickfont: { color: SUB_CLR, size: 10 }, zerolinecolor: '#333',
+        tickprefix: xFmt,
+      },
+      yaxis: {
+        title: { text: 'Days to Expiry', font: { size: 11, color: '#888' } },
+        gridcolor: '#222', showbackground: true, backgroundcolor: '#111',
+        tickfont: { color: SUB_CLR, size: 10 }, zerolinecolor: '#333',
+      },
+      zaxis: {
+        title: { text: 'Implied Vol (%)', font: { size: 11, color: '#888' } },
+        gridcolor: '#222', showbackground: true, backgroundcolor: '#111',
+        tickfont: { color: SUB_CLR, size: 10 }, zerolinecolor: '#333',
+        ticksuffix: '%',
+      },
+      aspectmode: 'manual',
+      aspectratio: { x: 1.5, y: 1.2, z: 0.7 },
+    },
+  };
+
+  const config = {
+    responsive: true, displaylogo: false,
+    modeBarButtonsToRemove: ['toImage'],
+    modeBarButtonsToAdd: [{
+      name: 'Download PNG', icon: Plotly.Icons.camera,
+      click: gd => Plotly.downloadImage(gd, { format: 'png', filename: `vol_surface_${d.symbol}` }),
+    }],
+  };
+
+  Plotly.react('surface-plot', [surfaceTrace, scatterTrace], layout, config);
+
+  const cnt = pts.length;
+  surfaceTag.textContent = `${cnt} option strikes · ${state.displayMode.toUpperCase()} composite`;
+  surfaceTag.className = 'tag tag-green';
+}
+
+// ── Vol Smile ──────────────────────────────────────────────────────────────
+function renderSmile(expiry) {
+  const d = state.data;
+  if (!d || !d.smiles || !expiry) return;
+
+  const rows = d.smiles[expiry];
+  if (!rows || !rows.length) return;
+
+  state.smileExpiry = expiry;
+  const spot = d.spot;
+  const calls = rows.filter(r => r.type === 'call').sort((a,b)=>a.strike-b.strike);
+  const puts  = rows.filter(r => r.type === 'put').sort((a,b)=>a.strike-b.strike);
+
+  const xMode = state.axisMode === 'moneyness';
+  const xCalls = calls.map(r => xMode ? r.moneyness : r.strike);
+  const xPuts  = puts.map(r  => xMode ? r.moneyness : r.strike);
+  const xLabel = xMode ? 'Moneyness (K/S)' : 'Strike ($)';
+
+  const traces = [
+    {
+      x: xCalls, y: calls.map(r=>r.iv),
+      mode: 'lines+markers', name: 'Calls',
+      line: { color: '#00c805', width: 2 },
+      marker: { size: 5, color: '#00c805' },
+      hovertemplate: `<b>Call</b><br>${xLabel}: %{x}<br>IV: %{y:.2f}%<extra></extra>`,
+    },
+    {
+      x: xPuts, y: puts.map(r=>r.iv),
+      mode: 'lines+markers', name: 'Puts',
+      line: { color: '#ff4b4b', width: 2 },
+      marker: { size: 5, color: '#ff4b4b' },
+      hovertemplate: `<b>Put</b><br>${xLabel}: %{x}<br>IV: %{y:.2f}%<extra></extra>`,
+    },
+    {
+      x: [xMode ? 1.0 : spot, xMode ? 1.0 : spot],
+      y: [0, 200],
+      mode: 'lines', name: 'Spot',
+      line: { color: '#f59e0b', width: 1.5, dash: 'dot' },
+      hoverinfo: 'skip',
+    },
+  ];
+
+  const layout = {
+    ...layout2dBase,
+    xaxis: { ...axis2dBase, title: xLabel, tickprefix: xMode ? '' : '$' },
+    yaxis: { ...axis2dBase, title: 'Implied Vol (%)', ticksuffix: '%', rangemode: 'tozero' },
+    showlegend: true,
+  };
+
+  Plotly.react('smile-plot', traces, layout, { responsive: true, displaylogo: false });
+}
+
+// ── Term Structure ─────────────────────────────────────────────────────────
+function renderTermStructure() {
+  const d = state.data;
+  if (!d || !d.term_structure || !d.term_structure.length) return;
+
+  const ts = d.term_structure;
+  const x = ts.map(r => r.dte);
+  const y = ts.map(r => r.atm_iv);
+
+  const traces = [
+    {
+      x, y,
+      mode: 'lines+markers', type: 'scatter', name: 'ATM IV',
+      line: { color: '#3b82f6', width: 2.5 },
+      marker: {
+        size: 8, color: y,
+        colorscale: VOL_COLORSCALE,
+        cmin: Math.min(...y), cmax: Math.max(...y),
+        line: { color: '#141414', width: 1.5 },
+      },
+      fill: 'tozeroy',
+      fillcolor: 'rgba(59,130,246,0.07)',
+      hovertemplate: '<b>DTE:</b> %{x}d<br><b>ATM IV:</b> %{y:.2f}%<extra></extra>',
+    },
+  ];
+
+  const layout = {
+    ...layout2dBase,
+    xaxis: { ...axis2dBase, title: 'Days to Expiry', ticksuffix: 'd' },
+    yaxis: { ...axis2dBase, title: 'ATM IV (%)', ticksuffix: '%', rangemode: 'tozero' },
+    showlegend: false,
+  };
+
+  Plotly.react('term-plot', traces, layout, { responsive: true, displaylogo: false });
+
+  // Update tag
+  if (ts.length >= 2) {
+    const slope = ts[ts.length-1].atm_iv - ts[0].atm_iv;
+    const label = slope > 0.5 ? 'Normal (Upward)' : slope < -0.5 ? 'Inverted' : 'Flat';
+    termTag.textContent = label;
+    termTag.className = 'tag ' + (slope > 0.5 ? 'tag-green' : slope < -0.5 ? 'tag tag-red' : 'tag-muted');
+  }
+}
+
+// ── Populate smile select ──────────────────────────────────────────────────
+function populateSmileSelect() {
+  const d = state.data;
+  if (!d || !d.expirations) return;
+  smileSelect.innerHTML = d.expirations
+    .filter(e => d.smiles && d.smiles[e])
+    .map(e => `<option value="${e}">${e}</option>`)
+    .join('');
+  if (smileSelect.options.length) renderSmile(smileSelect.options[0].value);
+}
+
+// ── Main load ──────────────────────────────────────────────────────────────
+async function loadSurface(ticker) {
+  if (!ticker) return;
+  state.ticker = ticker;
+  setLoading(`Loading ${ticker} options…`);
+
+  try {
+    loaderText.textContent = `Fetching ${ticker} option chain…`;
+    const resp = await fetch(`/api/surface/${encodeURIComponent(ticker)}`);
+    const json = await resp.json();
+
+    if (!resp.ok || json.error) {
+      showError(json.error || 'Failed to load data');
+      setEmpty();
+      return;
+    }
+
+    state.data = json;
+
+    // Render
+    renderStats(json);
+    setContent();
+    viewControls.style.display = 'flex';
+    renderSurface();
+    populateSmileSelect();
+    renderTermStructure();
+
+  } catch (err) {
+    showError('Network error: ' + err.message);
+    setEmpty();
+  }
+}
+
+// ── Event listeners ────────────────────────────────────────────────────────
+loadBtn.addEventListener('click', () => {
+  const t = tickerInput.value.trim().toUpperCase();
+  if (t) loadSurface(t);
+});
+
+tickerInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    const t = tickerInput.value.trim().toUpperCase();
+    if (t) loadSurface(t);
+  }
+});
+
+refreshBtn.addEventListener('click', () => {
+  if (state.ticker) {
+    // Bust cache by clearing and re-fetching
+    loadSurface(state.ticker);
+  }
+});
+
+smileSelect.addEventListener('change', () => {
+  renderSmile(smileSelect.value);
+});
+
+// Axis toggle
+document.querySelectorAll('[data-axis]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-axis]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.axisMode = btn.dataset.axis;
+    if (state.data) {
+      renderSurface();
+      renderSmile(state.smileExpiry || (smileSelect.options[0]?.value));
+    }
+  });
+});
+
+// Display toggle
+document.querySelectorAll('[data-display]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-display]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.displayMode = btn.dataset.display;
+    if (state.data) renderSurface();
+  });
+});
+
+// Resize handler
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (state.data) {
+      Plotly.Plots.resize('surface-plot');
+      Plotly.Plots.resize('smile-plot');
+      Plotly.Plots.resize('term-plot');
+    }
+  }, 200);
+});
+
+// ── Startup defaults ───────────────────────────────────────────────────────
+tickerInput.focus();
+</script>
+</body>
+</html>
